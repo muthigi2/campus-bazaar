@@ -48,7 +48,7 @@ function signToken(userId) {
 function setAuthCookie(res, token) {
   res.cookie('cb_jwt', token, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: IS_PRODUCTION ? 'none' : 'lax',
     secure: IS_PRODUCTION,
     maxAge: 1000 * 60 * 60 * 24 * 7,
   });
@@ -57,7 +57,7 @@ function setAuthCookie(res, token) {
 function clearAuthCookie(res) {
   res.clearCookie('cb_jwt', {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: IS_PRODUCTION ? 'none' : 'lax',
     secure: IS_PRODUCTION,
   });
 }
