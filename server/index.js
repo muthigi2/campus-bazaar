@@ -5,7 +5,6 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const nodemailer = require('nodemailer');
 const { body, query, param, validationResult } = require('express-validator');
 
 dotenv.config();
@@ -24,26 +23,13 @@ const ALLOWED_EMAIL_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS || '@illinois.e
   .filter(Boolean);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const LOCALHOST_PORTS = ['5173', '5176', '3000'];
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_USER = process.env.SMTP_USER || process.env.GMAIL_USER;
-const SMTP_PASS = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
-const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const SMTP_FROM = process.env.SMTP_FROM || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is required. Add it to a .env file.');
   process.exit(1);
 }
-
-const mailTransporter =
-  SMTP_USER && SMTP_PASS
-    ? nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_PORT === 465,
-        auth: { user: SMTP_USER, pass: SMTP_PASS },
-      })
-    : null;
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -424,19 +410,31 @@ function generateVerificationCode() {
 }
 
 async function sendVerificationEmail(email, code) {
-  if (!mailTransporter) {
-    throw new Error('Email sending is not configured. Set SMTP_USER and SMTP_PASS.');
+  if (!RESEND_API_KEY) {
+    throw new Error('Email sending is not configured. Set RESEND_API_KEY and SMTP_FROM/FROM_EMAIL.');
   }
 
   const subject = 'Campus Bazaar Email Verification';
   const text = `Your verification code is ${code}. It expires in 15 minutes.`;
 
-  await mailTransporter.sendMail({
-    from: SMTP_FROM,
-    to: email,
-    subject,
-    text,
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: SMTP_FROM,
+      to: email,
+      subject,
+      text,
+    }),
   });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Failed to send verification email: ${response.status} ${body}`);
+  }
 }
 
 async function issueVerificationCode(userId, email) {
