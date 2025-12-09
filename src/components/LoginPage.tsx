@@ -12,10 +12,19 @@ export function LoginPage({ onSubmit }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    if (isSignUp && password !== confirmPassword) {
+      setFormError('Passwords do not match');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await onSubmit({ email, password, isSignUp, name: isSignUp ? name : undefined });
@@ -55,6 +64,25 @@ export function LoginPage({ onSubmit }: LoginPageProps) {
               />
             </div>
 
+            {isSignUp && (
+              <>
+                <div>
+                  <Label htmlFor="name" className="text-[#13294B]">
+                    Full Name
+                  </Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1.5 border-gray-300 focus:border-[#E84A27] focus:ring-[#E84A27]"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
             <div>
               <Label htmlFor="password" className="text-[#13294B]">
                 Password
@@ -73,20 +101,6 @@ export function LoginPage({ onSubmit }: LoginPageProps) {
             {isSignUp && (
               <>
                 <div>
-                  <Label htmlFor="name" className="text-[#13294B]">
-                    Full Name
-                  </Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="mt-1.5 border-gray-300 focus:border-[#E84A27] focus:ring-[#E84A27]"
-                    required
-                  />
-                </div>
-                <div>
                   <Label htmlFor="confirmPassword" className="text-[#13294B]">
                     Confirm Password
                   </Label>
@@ -94,12 +108,16 @@ export function LoginPage({ onSubmit }: LoginPageProps) {
                     id="confirmPassword"
                     type="password"
                     placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     className="mt-1.5 border-gray-300 focus:border-[#E84A27] focus:ring-[#E84A27]"
                     required
                   />
                 </div>
               </>
             )}
+
+            {formError && <p className="text-sm text-red-600">{formError}</p>}
 
             <Button
               type="submit"

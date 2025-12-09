@@ -1,9 +1,9 @@
-import { ArrowLeft, Heart, Mail, BadgeCheck, MapPin, Copy, X, Edit, Trash2, CheckCircle2, Star, Clock } from 'lucide-react';
+import { ArrowLeft, Heart, Mail, BadgeCheck, MapPin, Copy, Edit, Trash2, CheckCircle2, Star } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { useState, useEffect } from 'react';
 import { contactSeller, getUser, Listing, User } from '../api';
 import { toast } from 'sonner@2.0.3';
@@ -43,8 +43,15 @@ export function ListingDetailsPage({
     try {
       const contact = await contactSeller(listing.id);
       const listingUrl = `${window.location.origin}/listing/${listing.id}`;
-      const body = `Hi,\n\nI'm interested in your listing "${listing.title}" on Campus Bazaar.\n\nView listing: ${listingUrl}\n\nCould you please provide more information?`;
-      const mailto = `mailto:${contact.sellerEmail}?subject=${encodeURIComponent(`Inquiry about your Campus Bazaar listing: ${listing.title}`)}&body=${encodeURIComponent(body)}`;
+      const body = `Hi,\n\nI'm interested in your listing "${listing.title}" on Campus Bazaar.\nListing: ${listingUrl}\n\nCould you please provide additional details about the item?\n\nThanks!`;
+      const mailtoBase =
+        contact.mailto?.startsWith('mailto:') && contact.mailto
+          ? contact.mailto
+          : `mailto:${contact.sellerEmail}?subject=${encodeURIComponent(
+              `Inquiry about your Campus Bazaar listing: ${listing.title}`
+            )}`;
+      const separator = mailtoBase.includes('?') ? '&' : '?';
+      const mailto = `${mailtoBase}${separator}body=${encodeURIComponent(body)}`;
       setSellerEmail(contact.sellerEmail);
       setMailtoLink(mailto);
       setContactDialogOpen(true);
@@ -65,7 +72,10 @@ export function ListingDetailsPage({
 
   const handleOpenEmailClient = () => {
     if (mailtoLink) {
-      window.location.href = mailtoLink;
+      const opened = window.open(mailtoLink, '_blank');
+      if (!opened) {
+        window.location.href = mailtoLink;
+      }
       setContactDialogOpen(false);
     }
   };
@@ -266,18 +276,10 @@ export function ListingDetailsPage({
 
             {/* Contact Seller Dialog */}
             <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogClose asChild>
-                  <button
-                    aria-label="Close"
-                    className="absolute right-4 top-4 rounded-md p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </DialogClose>
-                <DialogHeader>
-                  <DialogTitle className="text-lg font-semibold">Contact Seller</DialogTitle>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-md" hideCloseButton>
+              <DialogHeader>
+                <DialogTitle className="text-lg font-semibold">Contact Seller</DialogTitle>
+              </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
                     <p className="text-sm text-gray-600 mb-2">Seller's Email:</p>
