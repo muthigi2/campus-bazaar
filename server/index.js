@@ -23,6 +23,7 @@ const ALLOWED_EMAIL_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS || '@illinois.e
   .filter(Boolean);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const LOCALHOST_PORTS = ['5173', '5176', '3000'];
+const DISABLE_EMAIL_VERIFICATION = (process.env.DISABLE_EMAIL_VERIFICATION || '').toLowerCase() === 'true';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const SMTP_FROM = process.env.SMTP_FROM || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER;
 
@@ -438,6 +439,10 @@ async function sendVerificationEmail(email, code) {
 }
 
 async function issueVerificationCode(userId, email) {
+  if (DISABLE_EMAIL_VERIFICATION) {
+    return { code: null, expiresAt: null };
+  }
+
   const code = generateVerificationCode();
   const hash = await bcrypt.hash(code, 10);
   const expiresAt = new Date(Date.now() + VERIFICATION_CODE_TTL_MS);
@@ -562,10 +567,17 @@ app.post(
       const passwordHash = await bcrypt.hash(password, 10);
       const { rows } = await pool.query(
         `INSERT INTO users (email, password_hash, name, email_verified, verification_code_hash, verification_expires_at)
-         VALUES ($1, $2, $3, FALSE, NULL, NULL)
+         VALUES ($1, $2, $3, $4, NULL, NULL)
          RETURNING id, email`,
-        [email.toLowerCase(), passwordHash, name?.trim() || null]
+        [email.toLowerCase(), passwordHash, name?.trim() || null, DISABLE_EMAIL_VERIFICATION]
       );
+
+      if (DISABLE_EMAIL_VERIFICATION) {
+        const token = signToken(rows[0].id);
+        setAuthCookie(res, token);
+        const user = await getUserById(rows[0].id);
+        return res.status(201).json(user);
+      }
 
       await issueVerificationCode(rows[0].id, rows[0].email);
 
@@ -587,6 +599,9 @@ app.post(
   body('code').isLength({ min: 6, max: 6 }).withMessage('code must be 6 digits'),
   sendValidationErrors,
   async (req, res) => {
+    if (DISABLE_EMAIL_VERIFICATION) {
+      return res.status(400).json({ error: 'Email verification is disabled' });
+    }
     const { email, code } = req.body ?? {};
 
     try {
@@ -637,6 +652,9 @@ app.post(
   emailRule,
   sendValidationErrors,
   async (req, res) => {
+    if (DISABLE_EMAIL_VERIFICATION) {
+      return res.status(400).json({ error: 'Email verification is disabled' });
+    }
     const { email } = req.body ?? {};
 
     try {
@@ -676,7 +694,7 @@ app.post('/api/auth/login', emailRule, passwordRule, sendValidationErrors, async
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (!user.email_verified) {
+    if (!user.email_verified && !DISABLE_EMAIL_VERIFICATION) {
       await issueVerificationCode(user.id, user.email);
       return res.status(403).json({
         error: 'Email not verified. We sent you a verification code.',
