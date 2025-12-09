@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LoginPage } from './components/LoginPage';
+import { VerificationPage } from './components/VerificationPage';
 import { HomePage } from './components/HomePage';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -25,13 +26,15 @@ import {
   login,
   logout,
   me,
+  verifyEmail as apiVerifyEmail,
+  resendVerification as apiResendVerification,
   Listing,
   User,
   ApiError,
   UserSearchResult,
 } from './api';
 
-type Screen = 'login' | 'home' | 'myListings' | 'wishlist' | 'purchases' | 'post' | 'details' | 'profile';
+type Screen = 'login' | 'verify' | 'home' | 'myListings' | 'wishlist' | 'purchases' | 'post' | 'details' | 'profile';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
@@ -41,6 +44,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewingUserId, setViewingUserId] = useState<number | null>(null);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -74,18 +78,32 @@ export default function App() {
   const handleAuthSubmit = async (payload: { email: string; password: string; isSignUp: boolean; name?: string }) => {
     try {
       if (payload.isSignUp) {
-        await signup({ email: payload.email, password: payload.password, name: payload.name });
+        const response = await signup({ email: payload.email, password: payload.password, name: payload.name });
+        if (response.requiresVerification) {
+          setPendingVerificationEmail(response.email);
+          toast.success('Verification code sent to your email. Enter it to finish signing up.');
+          setCurrentScreen('verify');
+          return;
+        }
       } else {
         await login({ email: payload.email, password: payload.password });
       }
       // After login/signup, fetch fresh user data from /api/auth/me to ensure we have the correct user
       const user = await me();
       setCurrentUser(user);
+      setPendingVerificationEmail(null);
       toast.success(payload.isSignUp ? 'Account created!' : 'Welcome back!');
       setCurrentScreen('home');
       await loadData();
     } catch (error: any) {
       console.error('Auth failed', error);
+      if (error instanceof ApiError && error.data?.requiresVerification) {
+        const email = error.data.email || payload.email;
+        setPendingVerificationEmail(email);
+        setCurrentScreen('verify');
+        toast.error(error?.message || 'Please verify your email to continue.');
+        return;
+      }
       
       // Extract specific error messages from validation details
       if (error instanceof ApiError && error.details && error.details.length > 0) {
@@ -97,6 +115,42 @@ export default function App() {
       // Fallback to error message or generic message
       const errorMessage = error?.message || 'Authentication failed';
       toast.error(errorMessage);
+    }
+  };
+
+  const handleVerifyEmail = async (code: string) => {
+    if (!pendingVerificationEmail) return;
+    try {
+      const user = await apiVerifyEmail({ email: pendingVerificationEmail, code });
+      setCurrentUser(user);
+      setPendingVerificationEmail(null);
+      toast.success('Email verified! You are now signed in.');
+      setCurrentScreen('home');
+      await loadData();
+    } catch (error: any) {
+      console.error('Verify email failed', error);
+      if (error instanceof ApiError && error.details && error.details.length > 0) {
+        const messages = error.details.map((d) => d.msg).join(', ');
+        toast.error(messages);
+        return;
+      }
+      toast.error(error?.message || 'Failed to verify email');
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!pendingVerificationEmail) return;
+    try {
+      const response = await apiResendVerification(pendingVerificationEmail);
+      toast.success('Verification code resent to your email.');
+    } catch (error: any) {
+      console.error('Resend verification failed', error);
+      if (error instanceof ApiError && error.details && error.details.length > 0) {
+        const messages = error.details.map((d) => d.msg).join(', ');
+        toast.error(messages);
+        return;
+      }
+      toast.error(error?.message || 'Failed to resend verification code');
     }
   };
 
@@ -171,8 +225,9 @@ export default function App() {
     setCurrentUser(null);
     setListings([]);
     setWishlistIds([]);
+    setPendingVerificationEmail(null);
     setCurrentScreen('login');
-    toast.success('Logged out successfully');
+      toast.success('Logged out successfully');
   };
 
   const handleViewMyListings = () => {
@@ -278,6 +333,17 @@ export default function App() {
         </div>
       )}
       {currentScreen === 'login' && <LoginPage onSubmit={handleAuthSubmit} />}
+      {currentScreen === 'verify' && pendingVerificationEmail && (
+        <VerificationPage
+          email={pendingVerificationEmail}
+          onSubmit={handleVerifyEmail}
+          onResend={handleResendVerification}
+          onChangeEmail={() => {
+            setPendingVerificationEmail(null);
+            setCurrentScreen('login');
+          }}
+        />
+      )}
 
       {currentScreen === 'home' && (
         <HomePage

@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const nodemailer = require('nodemailer');
 const { body, query, param, validationResult } = require('express-validator');
 
 dotenv.config();
@@ -23,11 +24,26 @@ const ALLOWED_EMAIL_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS || '@illinois.e
   .filter(Boolean);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const LOCALHOST_PORTS = ['5173', '5176', '3000'];
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_USER = process.env.SMTP_USER || process.env.GMAIL_USER;
+const SMTP_PASS = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is required. Add it to a .env file.');
   process.exit(1);
 }
+
+const mailTransporter =
+  SMTP_USER && SMTP_PASS
+    ? nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_PORT === 465,
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+      })
+    : null;
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -280,6 +296,25 @@ async function ensureSchema() {
   `);
 
   await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS verification_code_hash TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS verification_expires_at TIMESTAMP WITH TIME ZONE;
+  `);
+
+  await pool.query(`
+    UPDATE users SET email_verified = TRUE WHERE verification_code_hash IS NULL;
+  `);
+
+  await pool.query(`
     ALTER TABLE wishlist
     ALTER COLUMN user_id TYPE INTEGER USING user_id::integer;
   `);
@@ -308,7 +343,7 @@ async function ensureSellerHasAccount(sellerName) {
     // Create a dummy password hash for seed users (they can't log in, but have profiles)
     const dummyPasswordHash = await bcrypt.hash('seed-user-' + emailBase, 10);
     const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
+      `INSERT INTO users (email, password_hash, email_verified) VALUES ($1, $2, TRUE) RETURNING id`,
       [email, dummyPasswordHash]
     );
     user = { id: rows[0].id };
@@ -382,6 +417,43 @@ function mapListing(row) {
   };
 }
 
+const VERIFICATION_CODE_TTL_MS = 15 * 60 * 1000;
+
+function generateVerificationCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function sendVerificationEmail(email, code) {
+  if (!mailTransporter) {
+    throw new Error('Email sending is not configured. Set SMTP_USER and SMTP_PASS.');
+  }
+
+  const subject = 'Campus Bazaar Email Verification';
+  const text = `Your verification code is ${code}. It expires in 15 minutes.`;
+
+  await mailTransporter.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject,
+    text,
+  });
+}
+
+async function issueVerificationCode(userId, email) {
+  const code = generateVerificationCode();
+  const hash = await bcrypt.hash(code, 10);
+  const expiresAt = new Date(Date.now() + VERIFICATION_CODE_TTL_MS);
+
+  await pool.query(
+    `UPDATE users SET verification_code_hash = $1, verification_expires_at = $2 WHERE id = $3`,
+    [hash, expiresAt, userId]
+  );
+
+  await sendVerificationEmail(email, code);
+
+  return { code, expiresAt };
+}
+
 async function getUserByEmail(email) {
   const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
   return rows[0] || null;
@@ -393,6 +465,7 @@ async function getUserById(id) {
       SELECT
         u.id,
         u.email,
+        u.email_verified,
         u.name,
         u.created_at,
         u.items_sold_count,
@@ -402,7 +475,7 @@ async function getUserById(id) {
       FROM users u
       LEFT JOIN user_ratings r ON r.user_id = u.id
       WHERE u.id = $1
-      GROUP BY u.id, u.email, u.name, u.created_at, u.items_sold_count, u.location
+      GROUP BY u.id, u.email, u.email_verified, u.name, u.created_at, u.items_sold_count, u.location
     `,
     [id]
   );
@@ -490,17 +563,103 @@ app.post(
 
       const passwordHash = await bcrypt.hash(password, 10);
       const { rows } = await pool.query(
-        `INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, created_at, items_sold_count`,
+        `INSERT INTO users (email, password_hash, name, email_verified, verification_code_hash, verification_expires_at)
+         VALUES ($1, $2, $3, FALSE, NULL, NULL)
+         RETURNING id, email`,
         [email.toLowerCase(), passwordHash, name?.trim() || null]
       );
 
-      const token = signToken(rows[0].id);
-      setAuthCookie(res, token);
-      const user = await getUserById(rows[0].id);
-      res.status(201).json(user);
+      await issueVerificationCode(rows[0].id, rows[0].email);
+
+      res.status(201).json({
+        requiresVerification: true,
+        email: rows[0].email,
+        message: 'Verification code sent to your email',
+      });
     } catch (error) {
       console.error('Error during signup', error);
       res.status(500).json({ error: 'Failed to sign up' });
+    }
+  }
+);
+
+app.post(
+  '/api/auth/verify-email',
+  emailRule,
+  body('code').isLength({ min: 6, max: 6 }).withMessage('code must be 6 digits'),
+  sendValidationErrors,
+  async (req, res) => {
+    const { email, code } = req.body ?? {};
+
+    try {
+      const user = await getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.email_verified) {
+        const token = signToken(user.id);
+        setAuthCookie(res, token);
+        const profile = await getUserById(user.id);
+        return res.json(profile);
+      }
+
+      if (!user.verification_code_hash || !user.verification_expires_at) {
+        return res.status(400).json({ error: 'No verification code found. Please request a new code.' });
+      }
+
+      const expiresAt = new Date(user.verification_expires_at);
+      if (expiresAt.getTime() < Date.now()) {
+        return res.status(400).json({ error: 'Verification code expired. Please request a new code.' });
+      }
+
+      const isMatch = await bcrypt.compare(code, user.verification_code_hash);
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+      }
+
+      await pool.query(
+        `UPDATE users SET email_verified = TRUE, verification_code_hash = NULL, verification_expires_at = NULL WHERE id = $1`,
+        [user.id]
+      );
+
+      const token = signToken(user.id);
+      setAuthCookie(res, token);
+      const profile = await getUserById(user.id);
+      res.json(profile);
+    } catch (error) {
+      console.error('Error verifying email', error);
+      res.status(500).json({ error: 'Failed to verify email' });
+    }
+  }
+);
+
+app.post(
+  '/api/auth/resend-verification',
+  emailRule,
+  sendValidationErrors,
+  async (req, res) => {
+    const { email } = req.body ?? {};
+
+    try {
+      const user = await getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: 'No account found for this email' });
+      }
+      if (user.email_verified) {
+        return res.status(400).json({ error: 'Email already verified' });
+      }
+
+      await issueVerificationCode(user.id, user.email);
+
+      res.json({
+        message: 'Verification code resent',
+        email: user.email,
+        requiresVerification: true,
+      });
+    } catch (error) {
+      console.error('Error resending verification code', error);
+      res.status(500).json({ error: 'Failed to resend verification code' });
     }
   }
 );
@@ -517,6 +676,15 @@ app.post('/api/auth/login', emailRule, passwordRule, sendValidationErrors, async
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!user.email_verified) {
+      await issueVerificationCode(user.id, user.email);
+      return res.status(403).json({
+        error: 'Email not verified. We sent you a verification code.',
+        requiresVerification: true,
+        email: user.email,
+      });
     }
 
     const token = signToken(user.id);
@@ -1181,4 +1349,3 @@ ensureSchema()
     console.error('Failed to start server', error);
     process.exit(1);
   });
-

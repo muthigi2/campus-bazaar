@@ -16,6 +16,7 @@ export interface Listing {
 export interface User {
   id: number;
   email: string;
+  email_verified?: boolean;
   name?: string;
   created_at?: string;
   items_sold_count?: number;
@@ -24,13 +25,26 @@ export interface User {
   location?: string;
 }
 
+export interface SignupResponse {
+  requiresVerification: boolean;
+  email: string;
+  message: string;
+}
+
+export interface VerificationResponse {
+  message: string;
+  email: string;
+  requiresVerification?: boolean;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
-    public details?: Array<{ path: string; msg: string; value?: any }>
+    public details?: Array<{ path: string; msg: string; value?: any }>,
+    public data?: any
   ) {
     super(message);
     this.name = 'ApiError';
@@ -59,7 +73,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     
     const errorMessage = errorData.error || errorData.message || 'Request failed';
     const details = errorData.details || [];
-    throw new ApiError(errorMessage, response.status, details);
+    throw new ApiError(errorMessage, response.status, details, errorData);
   }
 
   if (response.status === 204) {
@@ -220,11 +234,25 @@ export function updateUserProfile(userId: number, updates: { location?: string; 
 }
 
 export function signup(payload: { email: string; password: string; name?: string }) {
-  return request<User>('/auth/signup', { method: 'POST', body: JSON.stringify(payload) });
+  return request<SignupResponse>('/auth/signup', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export function login(payload: { email: string; password: string }) {
   return request<User>('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function verifyEmail(payload: { email: string; code: string }) {
+  return request<User>('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resendVerification(email: string) {
+  return request<VerificationResponse>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function logout() {
@@ -234,4 +262,3 @@ export function logout() {
 export function me() {
   return request<User>('/auth/me');
 }
-
