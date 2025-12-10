@@ -31,7 +31,6 @@ const OTP_REQUIRED_EMAILS = [
   'sgadi5@illinois.edu',
   'mns9@illinois.edu',
   'muthigi2@illinois.edu',
-  'priyams3@illinois.edu',
 ];
 
 if (!DATABASE_URL) {
