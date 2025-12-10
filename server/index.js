@@ -26,6 +26,12 @@ const LOCALHOST_PORTS = ['5173', '5176', '3000'];
 const DISABLE_EMAIL_VERIFICATION = (process.env.DISABLE_EMAIL_VERIFICATION || '').toLowerCase() === 'true';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const SMTP_FROM = process.env.SMTP_FROM || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER;
+const OTP_REQUIRED_EMAILS = [
+  'nhari7@illinois.edu',
+  'sgadi5@illinois.edu',
+  'mns9@illinois.edu',
+  'muthigi2@illinois.edu',
+];
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is required. Add it to a .env file.');
@@ -557,6 +563,8 @@ app.post(
   sendValidationErrors,
   async (req, res) => {
     const { email, password, name } = req.body ?? {};
+    const normalizedEmail = email.toLowerCase();
+    const requiresOtp = OTP_REQUIRED_EMAILS.includes(normalizedEmail);
 
     try {
       const existing = await getUserByEmail(email);
@@ -565,14 +573,15 @@ app.post(
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
+      const emailVerified = DISABLE_EMAIL_VERIFICATION || !requiresOtp;
       const { rows } = await pool.query(
         `INSERT INTO users (email, password_hash, name, email_verified, verification_code_hash, verification_expires_at)
          VALUES ($1, $2, $3, $4, NULL, NULL)
          RETURNING id, email`,
-        [email.toLowerCase(), passwordHash, name?.trim() || null, DISABLE_EMAIL_VERIFICATION]
+        [normalizedEmail, passwordHash, name?.trim() || null, emailVerified]
       );
 
-      if (DISABLE_EMAIL_VERIFICATION) {
+      if (emailVerified) {
         const token = signToken(rows[0].id);
         setAuthCookie(res, token);
         const user = await getUserById(rows[0].id);
@@ -682,6 +691,8 @@ app.post(
 
 app.post('/api/auth/login', emailRule, passwordRule, sendValidationErrors, async (req, res) => {
   const { email, password } = req.body ?? {};
+  const normalizedEmail = email.toLowerCase();
+  const requiresOtp = OTP_REQUIRED_EMAILS.includes(normalizedEmail);
 
   try {
     const user = await getUserByEmail(email);
@@ -694,13 +705,22 @@ app.post('/api/auth/login', emailRule, passwordRule, sendValidationErrors, async
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (!user.email_verified && !DISABLE_EMAIL_VERIFICATION) {
+    if (!user.email_verified && !DISABLE_EMAIL_VERIFICATION && requiresOtp) {
       await issueVerificationCode(user.id, user.email);
       return res.status(403).json({
         error: 'Email not verified. We sent you a verification code.',
         requiresVerification: true,
         email: user.email,
       });
+    }
+
+    // Auto-verify for non-OTP users
+    if (!requiresOtp && !user.email_verified) {
+      await pool.query(
+        `UPDATE users SET email_verified = TRUE, verification_code_hash = NULL, verification_expires_at = NULL WHERE id = $1`,
+        [user.id]
+      );
+      user.email_verified = true;
     }
 
     const token = signToken(user.id);
