@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, LogOut, Heart, MapPin, X } from 'lucide-react';
+import { Search, Plus, LogOut, Heart, MapPin, Moon } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -74,7 +74,6 @@ const CATEGORY_OPTIONS = [
 
 export function HomePage({ onPostListing, onViewListing, onViewMyListings, onViewWishlist, onViewPurchases, onToggleWishlist, onLogout, onViewProfile, currentUser, listings, wishlistIds, onListingsChange }: HomePageProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [category, setCategory] = useState<string>('All categories');
   const [location, setLocation] = useState<string>('All locations');
   const [minPrice, setMinPrice] = useState('');
@@ -92,6 +91,7 @@ export function HomePage({ onPostListing, onViewListing, onViewMyListings, onVie
       };
       if (searchQuery) params.q = searchQuery;
       if (category && category !== 'All categories') params.category = category;
+      if (location && location !== 'All locations') params.location = location;
       if (minPrice) params.minPrice = parseFloat(minPrice);
       if (maxPrice) params.maxPrice = parseFloat(maxPrice);
       
@@ -117,7 +117,7 @@ export function HomePage({ onPostListing, onViewListing, onViewMyListings, onVie
   useEffect(() => {
     loadFilteredListings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, minPrice, maxPrice, includeSold, sort]);
+  }, [category, location, minPrice, maxPrice, includeSold, sort]);
 
   // Debounced search
   useEffect(() => {
@@ -134,6 +134,7 @@ export function HomePage({ onPostListing, onViewListing, onViewMyListings, onVie
 
   const clearFilters = () => {
     setCategory('All categories');
+    setLocation('All locations');
     setMinPrice('');
     setMaxPrice('');
     setIncludeSold(false);
@@ -146,11 +147,19 @@ export function HomePage({ onPostListing, onViewListing, onViewMyListings, onVie
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[#E84A27]">Campus Bazaar</h1>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => document.dispatchEvent(new CustomEvent('cb-toggle-theme'))}
+                className="px-2 py-1 rounded-full border border-gray-200 hover:bg-gray-100 flex items-center gap-1 text-sm"
+                aria-label="Toggle theme"
+              >
+                <Moon className="w-4 h-4" />
+                <span>Theme</span>
+              </button>
               <button
                 onClick={onViewProfile}
                 className="text-sm text-[#13294B] hover:text-[#E84A27] hover:underline font-medium"
@@ -194,123 +203,110 @@ export function HomePage({ onPostListing, onViewListing, onViewMyListings, onVie
             </button>
           </div>
 
-          {/* Search Bar */}
-          <div className="flex gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <Input
-                type="search"
-                placeholder="Search items, textbooks, furniture..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="pl-10 border-gray-300 focus:border-[#E84A27] focus:ring-[#E84A27]"
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`border-gray-300 hover:bg-gray-100 ${showFilters ? 'bg-gray-100' : ''}`}
-            >
-              <Filter className="w-5 h-5" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleSearch}
-              className="border-gray-300 hover:bg-gray-100"
-            >
-              Search
-            </Button>
-          </div>
-
-          {/* Filters Panel */}
-          {showFilters && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#13294B]">Filters</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="text-xs"
-                >
-                  Clear All
-                </Button>
+          {/* Search + Inline Filters */}
+          <div className="space-y-3">
+            <div className="flex flex-col lg:flex-row gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Input
+                  type="search"
+                  placeholder="Search items, textbooks, furniture..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="pl-10 border-gray-300 focus:border-[#E84A27] focus:ring-[#E84A27]"
+                />
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-xs text-gray-600 mb-1">Category</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORY_OPTIONS.map((cat) => (
-                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div>
-                  <Label className="text-xs text-gray-600 mb-1">Min Price</Label>
+              <div className="flex flex-wrap gap-2 lg:items-center">
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger className="h-10 w-40 border-gray-300">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_OPTIONS.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={location} onValueChange={setLocation}>
+                  <SelectTrigger className="h-10 w-36 border-gray-300">
+                    <SelectValue placeholder="Location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCATION_OPTIONS.map((loc) => (
+                      <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={sort} onValueChange={setSort}>
+                  <SelectTrigger className="h-10 w-40 border-gray-300">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest</SelectItem>
+                    <SelectItem value="price_low">Price: Low → High</SelectItem>
+                    <SelectItem value="price_high">Price: High → Low</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <div className="flex items-center gap-2">
                   <Input
                     type="number"
-                    placeholder="0"
+                    inputMode="decimal"
+                    placeholder="Min"
                     value={minPrice}
                     onChange={(e) => setMinPrice(e.target.value)}
-                    className="h-9"
+                    className="h-10 w-24 border-gray-300"
                   />
-                </div>
-
-                <div>
-                  <Label className="text-xs text-gray-600 mb-1">Max Price</Label>
                   <Input
                     type="number"
-                    placeholder="1000"
+                    inputMode="decimal"
+                    placeholder="Max"
                     value={maxPrice}
                     onChange={(e) => setMaxPrice(e.target.value)}
-                    className="h-9"
+                    className="h-10 w-24 border-gray-300"
                   />
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="include-sold"
-                    checked={includeSold}
-                    onCheckedChange={(checked) => {
-                      setIncludeSold(checked === true);
-                    }}
-                  />
-                  <Label 
-                    htmlFor="include-sold" 
-                    className="text-sm cursor-pointer select-none"
-                    onClick={() => setIncludeSold(!includeSold)}
-                  >
-                    Include sold items
-                  </Label>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-gray-600">Sort:</Label>
-                  <Select value={sort} onValueChange={setSort}>
-                    <SelectTrigger className="h-9 w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="newest">Newest</SelectItem>
-                      <SelectItem value="price_low">Price: Low → High</SelectItem>
-                      <SelectItem value="price_high">Price: High → Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleSearch}
+                  className="border-gray-300 hover:bg-gray-100"
+                >
+                  Search
+                </Button>
               </div>
             </div>
-          )}
+
+            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="include-sold-inline"
+                  checked={includeSold}
+                  onCheckedChange={(checked) => setIncludeSold(checked === true)}
+                />
+                <Label
+                  htmlFor="include-sold-inline"
+                  className="cursor-pointer select-none"
+                  onClick={() => setIncludeSold(!includeSold)}
+                >
+                  Include sold items
+                </Label>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="px-2 text-xs text-[#E84A27]"
+              >
+                Clear filters
+              </Button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -334,40 +330,40 @@ export function HomePage({ onPostListing, onViewListing, onViewMyListings, onVie
         )}
         {!isLoading && listings && listings.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {listings.map((listing) => {
-            const isWishlisted = wishlistIds.includes(listing.id);
-            
-            return (
-              <Card
-                key={listing.id}
-                className="overflow-hidden rounded-xl border border-gray-200 hover:shadow-lg transition-shadow relative"
-              >
-                {/* Wishlist Button */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleWishlist(listing.id);
-                        }}
-                        className="absolute top-3 right-3 z-10 bg-white rounded-full p-2 shadow-md hover:shadow-lg transition-all"
-                        aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                      >
-                        <Heart
-                          className={`w-5 h-5 ${
-                            isWishlisted
-                              ? 'fill-[#E84A27] text-[#E84A27]'
-                              : 'text-gray-400'
-                          }`}
-                        />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                  {listings.map((listing) => {
+                  const isWishlisted = wishlistIds.includes(listing.id);
+                  
+                  return (
+                    <Card
+                      key={listing.id}
+                      className="overflow-hidden rounded-xl border border-gray-200 hover:shadow-lg transition-shadow relative"
+                    >
+                      {/* Wishlist Button */}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleWishlist(listing.id);
+                              }}
+                              className="absolute top-3 right-3 z-10 bg-white rounded-full p-2 shadow-md hover:shadow-lg transition-all"
+                              aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                            >
+                              <Heart
+                                className={`w-5 h-5 ${
+                                  isWishlisted
+                                      ? 'fill-[#E84A27] text-[#E84A27]'
+                                      : 'text-gray-400'
+                                }`}
+                              />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
 
                 <div
                   className="cursor-pointer"

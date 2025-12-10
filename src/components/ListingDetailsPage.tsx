@@ -320,11 +320,11 @@ export function ListingDetailsPage({
             </Dialog>
 
             {/* Additional Info */}
-            <div className="bg-gray-100 rounded-xl p-4 border border-gray-200">
-              <p className="text-gray-600 text-sm">
+            <div className="bg-gray-100 rounded-xl p-4 border border-gray-200 dark:bg-[#0f172a] dark:border-[#1f2937]">
+              <p className="text-gray-600 text-sm dark:text-gray-200">
                 🛡️ Meet in public places on campus for safety
               </p>
-              <p className="text-gray-600 text-sm mt-2">
+              <p className="text-gray-600 text-sm mt-2 dark:text-gray-200">
                 📍 All transactions are between UIUC students only
               </p>
             </div>

@@ -1,4 +1,4 @@
-import { Search, Plus, Trash2, LogOut, CheckCircle2, MapPin, Clock } from 'lucide-react';
+import { Search, Plus, Trash2, LogOut, CheckCircle2, MapPin, Clock, Moon } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -74,6 +74,14 @@ export function MyListingsPage({
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[#E84A27]">Campus Bazaar</h1>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => document.dispatchEvent(new CustomEvent('cb-toggle-theme'))}
+                className="px-2 py-1 rounded-full border border-gray-200 hover:bg-gray-100 flex items-center gap-1 text-sm"
+                aria-label="Toggle theme"
+              >
+                <Moon className="w-4 h-4" />
+                <span>Theme</span>
+              </button>
               <button
                 onClick={onViewProfile}
                 className="text-sm text-[#13294B] hover:text-[#E84A27] hover:underline font-medium"
@@ -189,35 +197,15 @@ export function MyListingsPage({
                     )}
                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       {!listing.isSold && listing.purchaseStatus !== 'pending' && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 text-green-600 border-green-600 hover:bg-green-50"
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                              Mark Sold
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Mark as Sold</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to mark "{listing.title}" as sold? This will update your seller rating.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => onMarkSold(listing)}
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                Mark Sold
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-green-600 border-green-600 hover:bg-green-50"
+                          onClick={() => onMarkSold(listing)}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1" />
+                          Mark Sold
+                        </Button>
                       )}
                       {listing.purchaseStatus === 'pending' && !listing.isSold && (
                         <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800 flex items-center gap-1">

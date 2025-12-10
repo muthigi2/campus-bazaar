@@ -282,6 +282,26 @@ export default function App() {
   const [buyerSearchResults, setBuyerSearchResults] = useState<UserSearchResult[]>([]);
   const [selectedBuyer, setSelectedBuyer] = useState<UserSearchResult | null>(null);
   const [isSearchingBuyers, setIsSearchingBuyers] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const stored = localStorage.getItem('cb-theme');
+    if (stored === 'dark' || stored === 'light') {
+      setTheme(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('cb-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const handler = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    document.addEventListener('cb-toggle-theme', handler);
+    return () => document.removeEventListener('cb-toggle-theme', handler);
+  }, []);
 
   const handleMarkSoldClick = (listing: Listing) => {
     setSelectedListingForSale(listing);
@@ -395,8 +415,12 @@ export default function App() {
 
       {currentScreen === 'purchases' && (
         <MyPurchasesPage
-          onBack={handleViewAllListings}
+          onViewAllListings={handleViewAllListings}
+          onViewMyListings={handleViewMyListings}
+          onViewWishlist={handleViewWishlist}
           onViewListing={handleViewListing}
+          onViewProfile={handleViewMyProfile}
+          onLogout={handleLogout}
           currentUser={currentUser}
         />
       )}
@@ -489,6 +513,7 @@ export default function App() {
       )}
 
       <Toaster />
+
     </>
   );
 }

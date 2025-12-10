@@ -1,4 +1,4 @@
-import { Search, Heart, LogOut } from 'lucide-react';
+import { Search, Heart, LogOut, Moon } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -67,6 +67,14 @@ export function WishlistPage({
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-[#E84A27]">Campus Bazaar</h1>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => document.dispatchEvent(new CustomEvent('cb-toggle-theme'))}
+                className="px-2 py-1 rounded-full border border-gray-200 hover:bg-gray-100 flex items-center gap-1 text-sm"
+                aria-label="Toggle theme"
+              >
+                <Moon className="w-4 h-4" />
+                <span>Theme</span>
+              </button>
               <button
                 onClick={onViewProfile}
                 className="text-sm text-[#13294B] hover:text-[#E84A27] hover:underline font-medium"

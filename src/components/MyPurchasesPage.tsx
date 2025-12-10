@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, CheckCircle2, Clock } from 'lucide-react';
-import { Button } from './ui/button';
+import { Package, CheckCircle2, Clock, Moon } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { ImageWithFallback } from './figma/ImageWithFallback';
@@ -9,12 +8,24 @@ import { getPurchases, confirmPurchase, cancelPurchase, Purchase } from '../api'
 import { toast } from 'sonner@2.0.3';
 
 interface MyPurchasesPageProps {
-  onBack: () => void;
+  onViewAllListings: () => void;
+  onViewMyListings: () => void;
+  onViewWishlist: () => void;
   onViewListing: (listing: any) => void;
+  onViewProfile: () => void;
+  onLogout?: () => void;
   currentUser: { id: number; email: string } | null;
 }
 
-export function MyPurchasesPage({ onBack, onViewListing, currentUser }: MyPurchasesPageProps) {
+export function MyPurchasesPage({
+  onViewAllListings,
+  onViewMyListings,
+  onViewWishlist,
+  onViewListing,
+  onViewProfile,
+  onLogout,
+  currentUser,
+}: MyPurchasesPageProps) {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [ratings, setRatings] = useState<{ [key: number]: number }>({}); // purchaseId -> rating
@@ -114,24 +125,57 @@ export function MyPurchasesPage({ onBack, onViewListing, currentUser }: MyPurcha
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h1 className="text-[#13294B] text-xl font-semibold">My Purchases</h1>
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-[#E84A27]">Campus Bazaar</h1>
             <div className="flex items-center gap-3">
               <button
-                onClick={onBack}
-                className="text-sm text-[#13294B] hover:text-[#E84A27] hover:underline font-medium"
+                onClick={() => document.dispatchEvent(new CustomEvent('cb-toggle-theme'))}
+                className="px-2 py-1 rounded-full border border-gray-200 hover:bg-gray-100 flex items-center gap-1 text-sm"
+                aria-label="Toggle theme"
               >
-                Back to Browse
+                <Moon className="w-4 h-4" />
+                <span>Theme</span>
               </button>
               <button
-                onClick={() => currentUser && onViewListing({ id: currentUser.id } as any)}
+                onClick={onViewProfile}
                 className="text-sm text-[#13294B] hover:text-[#E84A27] hover:underline font-medium"
               >
                 {currentUser?.email || 'UIUC Verified'}
               </button>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="text-sm text-gray-600 hover:text-[#E84A27] hover:underline font-medium"
+                >
+                  Logout
+                </button>
+              )}
             </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex gap-4 mb-4 border-b border-gray-200">
+            <button
+              onClick={onViewAllListings}
+              className="pb-3 px-1 border-b-2 border-transparent text-gray-600 hover:text-[#13294B] hover:border-gray-300 transition-colors"
+            >
+              Browse All
+            </button>
+            <button
+              onClick={onViewMyListings}
+              className="pb-3 px-1 border-b-2 border-transparent text-gray-600 hover:text-[#13294B] hover:border-gray-300 transition-colors"
+            >
+              My Listings
+            </button>
+            <button
+              onClick={onViewWishlist}
+              className="pb-3 px-1 border-b-2 border-transparent text-gray-600 hover:text-[#13294B] hover:border-gray-300 transition-colors"
+            >
+              Wishlist
+            </button>
+            <button className="pb-3 px-1 border-b-2 border-[#E84A27] text-[#E84A27]">
+              My Purchases
+            </button>
           </div>
         </div>
       </header>
@@ -149,7 +193,7 @@ export function MyPurchasesPage({ onBack, onViewListing, currentUser }: MyPurcha
                   <Clock className="w-5 h-5" />
                   Pending Confirmation ({pendingPurchases.length})
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {pendingPurchases.map((purchase) => {
                     const currentRating = ratings[purchase.id] || 0;
                     const bought = boughtStatus[purchase.id];
@@ -287,7 +331,7 @@ export function MyPurchasesPage({ onBack, onViewListing, currentUser }: MyPurcha
                   <CheckCircle2 className="w-5 h-5" />
                   Confirmed Purchases ({confirmedPurchases.length})
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {confirmedPurchases.map((purchase) => (
                     <Card key={purchase.id} className="overflow-hidden rounded-xl border border-gray-200 hover:shadow-lg transition-shadow">
                       <div className="aspect-square bg-gray-200 overflow-hidden cursor-pointer" onClick={() => onViewListing(purchase.listing)}>
@@ -334,4 +378,3 @@ export function MyPurchasesPage({ onBack, onViewListing, currentUser }: MyPurcha
     </div>
   );
 }
-
