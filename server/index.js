@@ -24,6 +24,19 @@ const ALLOWED_EMAIL_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS || '@illinois.e
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const LOCALHOST_PORTS = ['5173', '5176', '3000'];
 const DISABLE_EMAIL_VERIFICATION = (process.env.DISABLE_EMAIL_VERIFICATION || '').toLowerCase() === 'true';
+
+// Emails that require OTP verification
+const EMAILS_REQUIRING_OTP = [
+  'sgadi5@illinois.edu',
+  'priyams3@illinois.edu',
+  'nhari7@illinois.edu',
+  'mns9@illinois.edu',
+  'muthigi2@illinois.edu',
+].map((e) => e.toLowerCase());
+
+function requiresEmailVerification(email) {
+  return EMAILS_REQUIRING_OTP.includes(email.toLowerCase());
+}
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const SMTP_FROM = process.env.SMTP_FROM || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.GMAIL_USER;
 
@@ -565,20 +578,27 @@ app.post(
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
+      const emailLower = email.toLowerCase();
+      
+      // Check if this email requires OTP verification
+      const needsVerification = requiresEmailVerification(emailLower) && !DISABLE_EMAIL_VERIFICATION;
+      
       const { rows } = await pool.query(
         `INSERT INTO users (email, password_hash, name, email_verified, verification_code_hash, verification_expires_at)
          VALUES ($1, $2, $3, $4, NULL, NULL)
          RETURNING id, email`,
-        [email.toLowerCase(), passwordHash, name?.trim() || null, DISABLE_EMAIL_VERIFICATION]
+        [emailLower, passwordHash, name?.trim() || null, !needsVerification]
       );
 
-      if (DISABLE_EMAIL_VERIFICATION) {
+      // If email doesn't require verification, sign them up directly
+      if (!needsVerification) {
         const token = signToken(rows[0].id);
         setAuthCookie(res, token);
         const user = await getUserById(rows[0].id);
         return res.status(201).json(user);
       }
 
+      // For emails requiring verification, send OTP
       await issueVerificationCode(rows[0].id, rows[0].email);
 
       res.status(201).json({
@@ -694,7 +714,9 @@ app.post('/api/auth/login', emailRule, passwordRule, sendValidationErrors, async
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (!user.email_verified && !DISABLE_EMAIL_VERIFICATION) {
+    // Only require verification for emails in the OTP list
+    const needsVerification = requiresEmailVerification(user.email) && !DISABLE_EMAIL_VERIFICATION;
+    if (!user.email_verified && needsVerification) {
       await issueVerificationCode(user.id, user.email);
       return res.status(403).json({
         error: 'Email not verified. We sent you a verification code.',
